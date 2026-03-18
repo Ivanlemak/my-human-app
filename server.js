@@ -13,14 +13,32 @@ app.use(express.json());
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        // УВАГА: Тут має бути реальний URL Human.ua для логіну
-        // Зазвичай це https://api.human.ua/v1/auth/login
-        const response = await axios.post('https://api.human.ua/v1/auth/login', {
-            email, password
+        
+        // Робимо реальний запит до Human.ua
+        const response = await axios.post('https://api.human.ua/v1/account/auth', {
+            email: email,
+            password: password
+        }, {
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
         });
-        res.json(response.data); 
+
+        // Якщо Human повернув токен
+        if (response.data && response.data.token) {
+            console.log("Вхід успішний!");
+            res.json({ success: true, token: response.data.token, user: response.data.user });
+        } else {
+            res.status(401).json({ error: "Не вдалося отримати токен" });
+        }
     } catch (e) {
-        res.status(401).json({ error: "Помилка входу. Перевір дані." });
+        console.error("Помилка Human API:", e.response?.data || e.message);
+        res.status(e.response?.status || 500).json({ 
+            error: "Помилка входу", 
+            details: e.response?.data 
+        });
     }
 });
 
