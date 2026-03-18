@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: var(--tg-theme-bg-color, #ffffff); color: var(--tg-theme-text-color, #000000); }
+        .btn-primary { background-color: var(--tg-theme-button-color, #2481cc); color: var(--tg-theme-button-text-color, #ffffff); }
+    </style>
+</head>
+<body class="p-6 font-sans">
+    <div id="login-form" class="space-y-4">
+        <h1 class="text-2xl font-bold mb-6 text-center">Вхід у Human.ua</h1>
+        
+        <div>
+            <label class="block text-sm font-medium opacity-70">Email</label>
+            <input type="email" id="email" class="w-full p-3 rounded-lg border border-gray-300 text-black" placeholder="example@gmail.com">
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium opacity-70">Пароль</label>
+            <input type="password" id="password" class="w-full p-3 rounded-lg border border-gray-300 text-black" placeholder="••••••••">
+        </div>
+
+        <button onclick="login()" class="w-full btn-primary p-4 rounded-xl font-bold shadow-lg">Увійти</button>
+        <p id="error" class="text-red-500 text-sm text-center hidden">Помилка входу. Перевірте дані.</p>
+    </div>
+
+    <div id="dashboard" class="hidden space-y-4 text-center">
+        <h2 id="welcome-user" class="text-xl font-bold">Привіт!</h2>
+        <div class="bg-gray-100 p-4 rounded-2xl text-black">
+            <p class="text-sm opacity-60">Твій статус успішності:</p>
+            <div id="stats-content" class="text-lg font-bold mt-2">Завантаження...</div>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Розгорнути на весь екран
+
+        async function login() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorElement = document.getElementById('error');
+
+            try {
+                // Відправляємо дані на ТВІЙ сервер у Render
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('login-form').classList.add('hidden');
+                    document.getElementById('dashboard').classList.remove('hidden');
+                    document.getElementById('welcome-user').innerText = `Привіт, ${data.user.first_name}!`;
+                    loadStats(data.token);
+                } else {
+                    errorElement.classList.remove('hidden');
+                }
+            } catch (e) {
+                errorElement.classList.remove('hidden');
+            }
+        }
+
+        async function loadStats(token) {
+            const statsResponse = await fetch('/api/stats', {
+                headers: { 'Authorization': token }
+            });
+            const stats = await statsResponse.json();
+            // Тут ми виведемо ту статистику зі скріншота (рівні успішності)
+            const text = stats.map(s => `${s.level}: ${s.count}`).join(' | ');
+            document.getElementById('stats-content').innerText = text;
+        }
+    </script>
+</body>
+</html>
