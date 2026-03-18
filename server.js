@@ -6,161 +6,105 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// --- ІНТЕРФЕЙС (HTML + CSS + JS) ---
+// ГОЛОВНА СТОРІНКА (HTML)
 app.get('/', (req, res) => {
     res.send(`
 <!DOCTYPE html>
-<html lang="uk">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Human Mini App</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: white; font-family: sans-serif; overflow-x: hidden; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .nav-btn.active { color: #3b82f6; border-top: 2px solid #3b82f6; }
+        body { background-color: #0f172a; color: white; }
+        .nav-btn { color: #94a3b8; transition: 0.3s; }
+        .nav-btn.active { color: #3b82f6; font-weight: bold; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
     <div id="auth-screen" class="flex-grow flex flex-col justify-center p-6">
-        <div class="text-center mb-10">
-            <h1 class="text-4xl font-black text-blue-500 tracking-widest">HUMAN</h1>
-            <p class="text-slate-400 text-sm mt-2">Твій щоденник у Telegram</p>
-        </div>
+        <h1 class="text-4xl font-black text-blue-500 text-center mb-10">HUMAN</h1>
         <div class="space-y-4 max-w-sm mx-auto w-full">
-            <input type="email" id="email" placeholder="Email" class="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 outline-none focus:border-blue-500">
-            <input type="password" id="password" placeholder="Пароль" class="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 outline-none focus:border-blue-500">
-            <button onclick="login()" id="login-btn" class="w-full bg-blue-600 p-4 rounded-2xl font-bold active:scale-95 transition-all shadow-lg">Увійти</button>
-            <p id="err-text" class="text-red-400 text-center text-sm hidden"></p>
+            <input type="email" id="email" placeholder="Email" class="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 outline-none">
+            <input type="password" id="password" placeholder="Пароль" class="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 outline-none">
+            <button onclick="handleLogin()" id="login-btn" class="w-full bg-blue-600 p-4 rounded-xl font-bold">Увійти</button>
+            <p id="error" class="text-red-500 text-center text-sm hidden"></p>
         </div>
     </div>
 
     <div id="main-screen" class="hidden flex flex-col h-screen">
-        <header class="p-6 pb-2">
+        <div class="p-6">
             <h2 id="user-name" class="text-2xl font-bold">Привіт!</h2>
-            <p class="text-slate-400 text-sm" id="current-tab-title">Оцінки</p>
-        </header>
+            <p id="page-title" class="text-slate-400">Оцінки</p>
+        </div>
 
-        <main class="flex-grow overflow-y-auto p-6 pb-24">
-            <div id="tab-grades" class="tab-content active">
-                <div id="grades-list" class="space-y-3">
-                    <p class="text-slate-500 text-center animate-pulse">Завантаження оцінок...</p>
-                </div>
-            </div>
+        <div id="content" class="flex-grow p-6 overflow-y-auto space-y-4">
+            <p class="text-center text-slate-500">Завантаження...</p>
+        </div>
 
-            <div id="tab-schedule" class="tab-content">
-                <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 text-center">
-                    <p class="text-slate-400">Розклад на сьогодні порожній або завантажується...</p>
-                </div>
-            </div>
-
-            <div id="tab-homework" class="tab-content">
-                <div class="bg-slate-800 p-6 rounded-3xl border border-slate-700 text-center">
-                    <p class="text-slate-400">Нових завдань не знайдено</p>
-                </div>
-            </div>
-        </main>
-
-        <nav class="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 flex justify-around p-3 pb-6">
-            <button onclick="switchTab('grades')" class="nav-btn active flex flex-col items-center text-xs" id="btn-grades">
-                <span class="text-xl">📊</span>
-                <span>Оцінки</span>
-            </button>
-            <button onclick="switchTab('schedule')" class="nav-btn flex flex-col items-center text-xs" id="btn-schedule">
-                <span class="text-xl">📅</span>
-                <span>Розклад</span>
-            </button>
-            <button onclick="switchTab('homework')" class="nav-btn flex flex-col items-center text-xs" id="btn-homework">
-                <span class="text-xl">📝</span>
-                <span>Домашка</span>
-            </button>
-        </nav>
+        <div class="p-4 bg-slate-900 border-t border-slate-800 flex justify-around">
+            <button onclick="changeTab('grades')" class="nav-btn active">📊 Оцінки</button>
+            <button onclick="changeTab('schedule')" class="nav-btn">📅 Розклад</button>
+            <button onclick="changeTab('homework')" class="nav-btn">📝 Домашка</button>
+        </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        
-        let currentUser = null;
-        let authToken = null;
+        let token = '';
+        let uid = '';
 
-        async function login() {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value.trim();
+        async function handleLogin() {
+            const e = document.getElementById('email').value;
+            const p = document.getElementById('password').value;
             const btn = document.getElementById('login-btn');
-            const err = document.getElementById('err-text');
+            const err = document.getElementById('error');
 
             btn.disabled = true;
             btn.innerText = 'Входимо...';
 
             try {
-                const r = await fetch('/api/login', {
+                const res = await fetch('/api/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ email: e, password: p })
                 });
-                const d = await r.json();
+                const data = await res.json();
 
-                if (d.success) {
-                    authToken = d.token;
-                    currentUser = d.user;
-                    document.getElementById('auth-screen').classList.add('hidden');
-                    document.getElementById('main-screen').classList.remove('hidden');
-                    document.getElementById('user-name').innerText = "Привіт, " + d.user.first_name + "!";
-                    loadData('grades');
+                if (data.success) {
+                    token = data.token;
+                    uid = data.user.id;
+                    document.getElementById('auth-screen').style.display = 'none';
+                    document.getElementById('main-screen').style.display = 'flex';
+                    document.getElementById('user-name').innerText = 'Привіт, ' + data.user.first_name;
+                    changeTab('grades');
                 } else {
-                    err.innerText = d.error;
+                    err.innerText = data.error;
                     err.classList.remove('hidden');
                     btn.disabled = false;
                     btn.innerText = 'Увійти';
                 }
-            } catch(e) {
-                err.innerText = "Помилка мережі";
-                err.classList.remove('hidden');
-                btn.disabled = false;
-            }
+            } catch(ex) { alert('Помилка сервера'); }
         }
 
-        function switchTab(tab) {
-            // Перемикання контенту
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.getElementById('tab-' + tab).classList.add('active');
+        async function changeTab(type) {
+            const cont = document.getElementById('content');
+            const tit = document.getElementById('page-title');
+            tit.innerText = type === 'grades' ? 'Оцінки' : (type === 'schedule' ? 'Розклад' : 'Домашка');
+            cont.innerHTML = 'Завантаження...';
 
-            // Перемикання кнопок
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('btn-' + tab).classList.add('active');
-
-            const titles = { grades: 'Оцінки', schedule: 'Розклад', homework: 'Домашка' };
-            document.getElementById('current-tab-title').innerText = titles[tab];
-
-            loadData(tab);
-        }
-
-        async function loadData(type) {
             if (type === 'grades') {
-                const list = document.getElementById('grades-list');
                 try {
-                    const r = await fetch('/api/stats', { 
-                        headers: { 
-                            'Authorization': authToken,
-                            'User-ID': currentUser.id 
-                        } 
-                    });
+                    const r = await fetch('/api/stats', { headers: { 'auth': token, 'uid': uid } });
                     const stats = await r.json();
-                    
-                    list.innerHTML = stats.map(s => \`
-                        <div class="flex justify-between items-center bg-slate-800 p-5 rounded-3xl border border-slate-700 shadow-lg">
-                            <span class="capitalize font-medium">\${s.level} рівень</span>
-                            <span class="bg-blue-600 px-4 py-1 rounded-full font-bold">\${s.count}</span>
-                        </div>
-                    \`).join('');
-                } catch(e) {
-                    list.innerHTML = "Не вдалося завантажити оцінки.";
-                }
+                    cont.innerHTML = stats.map(s => '<div class="p-4 bg-slate-800 rounded-xl border border-slate-700 flex justify-between"><span>'+s.level+' рівень</span><span class="text-blue-400 font-bold">'+s.count+'</span></div>').join('');
+                } catch(e) { cont.innerHTML = 'Помилка завантаження'; }
+            } else {
+                cont.innerHTML = '<div class="text-center text-slate-500 mt-10">Цей розділ скоро запрацює!</div>';
             }
         }
     </script>
@@ -169,33 +113,29 @@ app.get('/', (req, res) => {
     `);
 });
 
-// --- API (СЕРВЕРНА ЛОГІКА) ---
-
+// API ДЛЯ ВХОДУ
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const response = await axios.post('https://api.human.ua/v1/auth', { email, password }, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
-        });
+        const response = await axios.post('https://api.human.ua/v1/auth', { email, password });
         res.json({ success: true, token: response.data.token, user: response.data.user });
     } catch (e) {
-        res.status(401).json({ success: false, error: "Невірний логін" });
+        res.status(401).json({ success: false, error: 'Помилка входу' });
     }
 });
 
+// API ДЛЯ ОЦІНОК
 app.get('/api/stats', async (req, res) => {
     try {
-        const token = req.headers.authorization;
-        const userId = req.headers['user-id']; // Беремо ID того, хто залогінився
-        
-        const response = await axios.get(\`https://api.human.ua/v1/student/\${userId}/performance/average\`, {
-            headers: { 'Authorization': "Bearer " + token }
+        const { auth, uid } = req.headers;
+        const response = await axios.get('https://api.human.ua/v1/student/' + uid + '/performance/average', {
+            headers: { 'Authorization': 'Bearer ' + auth }
         });
         res.json(response.data);
     } catch (e) {
-        res.json([{level: 'помилка', count: 0}]);
+        res.json([]);
     }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Бот запущено!"));
+app.listen(PORT, () => console.log('Server is running'));
