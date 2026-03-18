@@ -6,7 +6,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Твоя пряма адреса на Render
 const SERVER_URL = "https://my-human-app.onrender.com"; 
 
 app.get('/', (req, res) => {
@@ -20,111 +19,147 @@ app.get('/', (req, res) => {
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: white; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
-        .input-style { background: #1e293b; border: 1px solid #334155; outline: none; transition: 0.2s; }
-        .input-style:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+        body { background-color: #0f172a; color: white; font-family: sans-serif; }
+        .tab-btn.active { color: #3b82f6; border-bottom: 2px solid #3b82f6; }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 1.5rem; padding: 1rem; margin-bottom: 0.75rem; }
+        .hidden { display: none !important; }
     </style>
 </head>
-<body class="min-h-screen flex flex-col p-6">
+<body class="min-h-screen flex flex-col">
 
-    <div id="auth-screen" class="flex-grow flex flex-col justify-center max-w-sm mx-auto w-full">
-        <div class="text-center mb-10">
-            <h1 class="text-4xl font-black text-blue-500 tracking-tighter">HUMAN</h1>
-            <p class="text-slate-400 text-sm mt-2">Твій успіх у твоїх руках</p>
-        </div>
-
-        <div class="space-y-4">
-            <input type="email" id="email" placeholder="Email" class="input-style w-full p-4 rounded-2xl">
-            <input type="password" id="password" placeholder="Пароль" class="input-style w-full p-4 rounded-2xl">
-            <button onclick="login()" id="btn" class="w-full bg-blue-600 hover:bg-blue-700 p-4 rounded-2xl font-bold shadow-lg active:scale-95 transition-all">Увійти</button>
-            <p id="msg" class="text-center text-red-400 text-sm hidden font-medium"></p>
-        </div>
+    <div id="loader" class="flex-grow flex items-center justify-center">
+        <p class="animate-bounce text-blue-500 font-bold">Вхід у систему...</p>
     </div>
 
-    <div id="main-screen" class="hidden flex-grow max-w-sm mx-auto w-full">
-        <div class="py-8 text-center">
-            <h2 id="user-hi" class="text-2xl font-bold text-white">Вітаємо!</h2>
-            <p class="text-slate-400">Твоя середня успішність</p>
-        </div>
+    <div id="auth-screen" class="hidden flex-grow flex flex-col justify-center p-6 max-w-sm mx-auto w-full">
+        <h1 class="text-4xl font-black text-blue-500 text-center mb-8 uppercase tracking-tighter">Human</h1>
+        <input type="email" id="email" placeholder="Email" class="w-full p-4 rounded-2xl bg-slate-800 mb-4 border border-slate-700 outline-none">
+        <input type="password" id="password" placeholder="Пароль" class="w-full p-4 rounded-2xl bg-slate-800 mb-6 border border-slate-700 outline-none">
+        <button onclick="login()" id="btn" class="w-full bg-blue-600 p-4 rounded-2xl font-bold active:scale-95 transition-all">Увійти</button>
+        <p id="msg" class="text-center text-red-400 mt-4 hidden"></p>
+    </div>
 
-        <div id="grades-list" class="space-y-4">
-            <div class="animate-pulse flex flex-col space-y-3">
-                <div class="h-16 bg-slate-800 rounded-2xl"></div>
-                <div class="h-16 bg-slate-800 rounded-2xl"></div>
+    <div id="main-screen" class="hidden flex flex-col h-screen">
+        <div class="p-6 pb-2">
+            <div class="flex justify-between items-start">
+                <h2 id="user-hi" class="text-2xl font-bold">Привіт!</h2>
+                <button onclick="logout()" class="text-slate-500 text-xs uppercase font-bold">Вийти</button>
+            </div>
+            <div class="flex space-x-4 mt-4 border-b border-slate-800">
+                <button onclick="switchTab('grades')" id="t-grades" class="tab-btn active pb-2">Оцінки</button>
+                <button onclick="switchTab('schedule')" id="t-schedule" class="tab-btn pb-2">Розклад</button>
+                <button onclick="switchTab('hw')" id="t-hw" class="tab-btn pb-2">ДЗ</button>
             </div>
         </div>
+        <div id="content" class="flex-grow p-6 overflow-y-auto pb-20"></div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        tg.ready();
+        let authData = { token: '', uid: '' };
+
+        // ПЕРЕВІРКА ПРИ ЗАПУСКУ
+        window.onload = () => {
+            const savedToken = localStorage.getItem('h_token');
+            const savedUid = localStorage.getItem('h_uid');
+            const savedName = localStorage.getItem('h_name');
+
+            if (savedToken && savedUid) {
+                authData = { token: savedToken, uid: savedUid };
+                showMainScreen(savedName);
+            } else {
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('auth-screen').classList.remove('hidden');
+            }
+        };
 
         async function login() {
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value.trim();
             const btn = document.getElementById('btn');
-            const msg = document.getElementById('msg');
-            const baseUrl = "${SERVER_URL}";
-
-            if(!email || !password) return;
-
+            
             btn.disabled = true;
             btn.innerText = 'Входимо...';
-            msg.classList.add('hidden');
 
             try {
-                const response = await fetch(baseUrl + '/api/login', {
+                const r = await fetch('${SERVER_URL}/api/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ email, password })
                 });
+                const d = await r.json();
 
-                const data = await response.json();
-
-                if (data.success) {
-                    document.getElementById('auth-screen').classList.add('hidden');
-                    document.getElementById('main-screen').classList.remove('hidden');
-                    document.getElementById('user-hi').innerText = "Привіт, " + data.user.first_name + "!";
+                if (d.success) {
+                    // ЗБЕРІГАЄМО ДАНІ
+                    localStorage.setItem('h_token', d.token);
+                    localStorage.setItem('h_uid', d.user.id);
+                    localStorage.setItem('h_name', d.user.first_name);
                     
-                    fetchGrades(data.token, data.user.id);
+                    authData = { token: d.token, uid: d.user.id };
+                    showMainScreen(d.user.first_name);
                 } else {
-                    msg.innerText = data.error || "Невірні дані";
-                    msg.classList.remove('hidden');
+                    document.getElementById('msg').innerText = "Помилка входу";
+                    document.getElementById('msg').classList.remove('hidden');
                     btn.disabled = false;
                     btn.innerText = 'Увійти';
                 }
-            } catch(e) {
-                msg.innerText = "Сервер не відповідає. Спробуй пізніше.";
-                msg.classList.remove('hidden');
-                btn.disabled = false;
-                btn.innerText = 'Увійти';
-            }
+            } catch(e) { alert("Помилка підключення"); btn.disabled = false; }
         }
 
-        async function fetchGrades(token, uid) {
-            const baseUrl = "${SERVER_URL}";
+        function showMainScreen(name) {
+            document.getElementById('loader').classList.add('hidden');
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('main-screen').classList.remove('hidden');
+            document.getElementById('user-hi').innerText = "Привіт, " + name + "!";
+            switchTab('grades');
+        }
+
+        function logout() {
+            localStorage.clear();
+            location.reload();
+        }
+
+        async function switchTab(tab) {
+            const cont = document.getElementById('content');
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('t-' + tab).classList.add('active');
+            cont.innerHTML = '<p class="text-center animate-pulse mt-10">Завантаження...</p>';
+
             try {
-                const res = await fetch(baseUrl + '/api/stats', {
-                    headers: { 'auth': token, 'uid': uid }
+                const r = await fetch('${SERVER_URL}/api/data?type=' + tab, {
+                    headers: { 'auth': authData.token, 'uid': authData.uid }
                 });
-                const stats = await res.json();
-                const list = document.getElementById('grades-list');
+                const data = await r.json();
                 
-                if (stats.length === 0) {
-                    list.innerHTML = '<div class="text-center text-slate-500 mt-10">Оцінок поки немає</div>';
+                if (!data || data.length === 0) {
+                    cont.innerHTML = '<p class="text-center text-slate-500 mt-10">Даних поки немає</p>';
                     return;
                 }
 
-                list.innerHTML = stats.map(s => \`
-                    <div class="flex justify-between items-center p-5 bg-slate-800 rounded-3xl border border-slate-700 shadow-md">
-                        <span class="capitalize text-slate-200 font-medium">\${s.level} рівень</span>
-                        <span class="text-blue-400 font-black text-xl">\${s.count}</span>
-                    </div>
-                \`).join('');
-            } catch(e) {
-                document.getElementById('grades-list').innerText = "Помилка завантаження балів";
-            }
+                if (tab === 'grades') {
+                    cont.innerHTML = data.map(s => \`
+                        <div class="card flex justify-between items-center">
+                            <span class="capitalize">\${s.level} рівень</span>
+                            <span class="text-blue-400 font-bold">\${s.count}</span>
+                        </div>
+                    \`).join('');
+                } else if (tab === 'schedule') {
+                    cont.innerHTML = data.map(i => \`
+                        <div class="card">
+                            <div class="text-blue-400 text-xs font-bold mb-1">\${i.time || 'Урок'}</div>
+                            <div class="font-medium">\${i.subject || i.title || 'Предмет'}</div>
+                        </div>
+                    \`).join('');
+                } else {
+                    cont.innerHTML = data.map(i => \`
+                        <div class="card">
+                            <div class="font-bold">\${i.title || 'Завдання'}</div>
+                            <div class="text-xs text-slate-400 mt-2">Дедлайн: \${i.deadline || 'не вказано'}</div>
+                        </div>
+                    \`).join('');
+                }
+            } catch(e) { cont.innerHTML = "Помилка завантаження"; }
         }
     </script>
 </body>
@@ -132,29 +167,31 @@ app.get('/', (req, res) => {
     `);
 });
 
-// --- API НА СЕРВЕРІ ---
+// --- СЕРВЕРНА ЧАСТИНА ---
 
 app.post('/api/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const response = await axios.post('https://api.human.ua/v1/auth', { email, password });
-        res.json({ success: true, token: response.data.token, user: response.data.user });
-    } catch (e) {
-        res.status(401).json({ success: false, error: "Невірний логін або пароль" });
-    }
+        const r = await axios.post('https://api.human.ua/v1/auth', { email, password });
+        res.json({ success: true, token: r.data.token, user: r.data.user });
+    } catch (e) { res.status(401).json({ success: false }); }
 });
 
-app.get('/api/stats', async (req, res) => {
+app.get('/api/data', async (req, res) => {
+    const { auth, uid } = req.headers;
+    const { type } = req.query;
+    const config = { headers: { 'Authorization': 'Bearer ' + auth } };
+
     try {
-        const { auth, uid } = req.headers;
-        const response = await axios.get('https://api.human.ua/v1/student/' + uid + '/performance/average', {
-            headers: { 'Authorization': 'Bearer ' + auth }
-        });
-        res.json(response.data);
-    } catch (e) {
-        res.status(500).json([]);
-    }
+        let url = '';
+        if (type === 'grades') url = "https://api.human.ua/v1/student/" + uid + "/performance/average";
+        if (type === 'schedule') url = "https://api.human.ua/v1/student/" + uid + "/lessons?date=" + new Date().toISOString().split('T')[0];
+        if (type === 'hw') url = "https://api.human.ua/v1/student/" + uid + "/assignments?status=active";
+
+        const r = await axios.get(url, config);
+        res.json(r.data);
+    } catch (e) { res.json([]); }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Work!'));
+app.listen(PORT, () => console.log('Ready'));
