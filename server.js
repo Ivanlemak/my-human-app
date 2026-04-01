@@ -18,7 +18,7 @@ app.get('/', (req, res) => {
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-slate-900 text-white min-h-screen flex flex-col">
+<body class="bg-[#0f172a] text-white min-h-screen flex flex-col">
 
     <div id="login-screen" class="flex-grow flex flex-col justify-center p-6 max-w-sm mx-auto w-full">
         <h1 class="text-4xl font-bold text-center text-blue-500 mb-8 tracking-wider">HUMAN</h1>
@@ -31,7 +31,7 @@ app.get('/', (req, res) => {
     </div>
 
     <div id="app-screen" class="hidden flex flex-col h-screen">
-        <header class="p-6 border-b border-slate-800 bg-slate-900 sticky top-0">
+        <header class="p-6 border-b border-slate-800 bg-[#0f172a] sticky top-0">
             <div class="flex justify-between items-center mb-6">
                 <h2 id="user-name" class="text-xl font-bold text-blue-400 truncate pr-4">Вітаємо!</h2>
                 <button onclick="logout()" class="text-[10px] text-slate-400 uppercase tracking-widest border border-slate-700 px-3 py-1 rounded-lg">Вийти</button>
@@ -51,7 +51,6 @@ app.get('/', (req, res) => {
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // Автоматичний вхід, якщо вже авторизувались раніше
         window.onload = () => {
             const token = localStorage.getItem('h_token');
             const name = localStorage.getItem('h_name');
@@ -73,16 +72,21 @@ app.get('/', (req, res) => {
             msg.classList.add('hidden');
 
             try {
-                const res = await fetch('/api/login', {
+                // ВИПРАВЛЕНО: Додано window.location.origin
+                const res = await fetch(window.location.origin + '/api/login', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ email, password })
                 });
                 
+                // Перевірка, чи сервер Render не "спить" (502/503 помилки)
+                if (!res.ok && (res.status === 502 || res.status === 503)) {
+                    throw new Error("Сервер прокидається. Зачекайте 15 секунд і натисніть ще раз.");
+                }
+
                 const data = await res.json();
                 
                 if (data.success) {
-                    // Зберігаємо токен у пам'ять телефону
                     localStorage.setItem('h_token', data.token);
                     localStorage.setItem('h_uid', data.user.id);
                     localStorage.setItem('h_name', data.user.first_name);
@@ -94,7 +98,9 @@ app.get('/', (req, res) => {
                     btn.innerText = 'Увійти';
                 }
             } catch (err) {
-                msg.innerText = "Помилка зв'язку. Спробуйте ще раз.";
+                // Тепер ми побачимо ТОЧНУ причину помилки на екрані
+                msg.innerText = err.message.includes('JSON') ? "Помилка сервера. Спробуйте ще раз." : err.message;
+                if(err.message === "Failed to fetch") msg.innerText = "Немає зв'язку. Спробуйте через 10 сек.";
                 msg.classList.remove('hidden');
                 btn.disabled = false;
                 btn.innerText = 'Увійти';
@@ -105,7 +111,7 @@ app.get('/', (req, res) => {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('app-screen').classList.remove('hidden');
             document.getElementById('user-name').innerText = "Привіт, " + name + "!";
-            loadTab('grades'); // Одразу вантажимо оцінки
+            loadTab('grades'); 
         }
 
         function logout() {
@@ -116,7 +122,6 @@ app.get('/', (req, res) => {
         async function loadTab(type) {
             const content = document.getElementById('content');
             
-            // Зміна кольору активної кнопки
             ['grades', 'schedule', 'hw'].forEach(t => {
                 const btn = document.getElementById('tab-' + t);
                 if(t === type) {
@@ -131,12 +136,14 @@ app.get('/', (req, res) => {
             content.innerHTML = '<div class="text-center text-slate-500 py-10 animate-pulse">Отримання даних...</div>';
 
             try {
-                const res = await fetch('/api/data?type=' + type, {
+                // ВИПРАВЛЕНО: Відносний шлях з window.location.origin
+                const res = await fetch(window.location.origin + '/api/data?type=' + type, {
                     headers: {
                         'auth': localStorage.getItem('h_token'),
                         'uid': localStorage.getItem('h_uid')
                     }
                 });
+                
                 const data = await res.json();
                 
                 if (!data || data.length === 0) {
@@ -144,7 +151,6 @@ app.get('/', (req, res) => {
                     return;
                 }
 
-                // Вивід даних списком
                 content.innerHTML = data.map(item => {
                     const title = item.subject || item.title || (item.level ? item.level + ' рівень' : 'Дані');
                     const subtitle = item.time || item.deadline || '';
@@ -163,7 +169,7 @@ app.get('/', (req, res) => {
     `);
 });
 
-// БЕКЕНД
+// --- БЕКЕНД ---
 
 app.post('/api/login', async (req, res) => {
     try {
@@ -174,7 +180,7 @@ app.post('/api/login', async (req, res) => {
         });
         res.json({ success: true, token: response.data.token, user: response.data.user });
     } catch (e) {
-        res.status(401).json({ success: false });
+        res.status(401).json({ success: false, error: "Unauthorized" });
     }
 });
 
@@ -204,5 +210,5 @@ app.get('/api/data', async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('App running on port', PORT));
+const PORT = process
+
