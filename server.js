@@ -3,10 +3,19 @@ const axios = require('axios');
 const cors = require('cors');
 
 const app = express();
-app.use(express.json());
-app.use(cors());
 
-// Головний інтерфейс додатку
+// Дозволяємо всі запити (важливо для Telegram)
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'auth', 'uid']
+}));
+app.use(express.json());
+
+// ПЕРЕВІРКА ПРИСУТНОСТІ (Щоб Render не спав)
+app.get('/ping', (req, res) => res.send('ok'));
+
+// ГОЛОВНА СТОРІНКА (ІНТЕРФЕЙС)
 app.get('/', (req, res) => {
     res.send(`
 <!DOCTYPE html>
@@ -14,201 +23,79 @@ app.get('/', (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Human App</title>
+    <title>HumanConnect</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background: #030712; color: white; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+        .glass { background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.06); }
+        .tab-active { color: #3b82f6; position: relative; font-weight: bold; }
+        .tab-active::after { content: ''; position: absolute; bottom: -8px; left: 0; width: 100%; height: 2px; background: #3b82f6; border-radius: 10px; }
+    </style>
 </head>
-<body class="bg-[#0f172a] text-white min-h-screen flex flex-col">
+<body class="min-h-screen flex flex-col">
 
-    <div id="login-screen" class="flex-grow flex flex-col justify-center p-6 max-w-sm mx-auto w-full">
-        <h1 class="text-4xl font-bold text-center text-blue-500 mb-8 tracking-wider">HUMAN</h1>
-        <div class="space-y-4">
-            <input type="email" id="email" placeholder="Email" class="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 outline-none focus:border-blue-500 transition-colors">
-            <input type="password" id="password" placeholder="Пароль" class="w-full p-4 rounded-xl bg-slate-800 border border-slate-700 outline-none focus:border-blue-500 transition-colors">
-            <button onclick="login()" id="btn" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-xl font-bold transition-colors">Увійти</button>
-            <p id="msg" class="text-red-400 text-center text-sm hidden"></p>
+    <div id="loader" class="fixed inset-0 z-50 bg-[#030712] flex items-center justify-center">
+        <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+    </div>
+
+    <div id="auth-screen" class="hidden flex-grow flex flex-col items-center justify-center p-8 max-w-sm mx-auto w-full">
+        <div class="mb-12 text-center">
+            <h1 class="text-5xl font-black text-blue-500 tracking-tighter uppercase">Human</h1>
+            <p class="text-slate-500 mt-2 text-xs font-bold uppercase tracking-widest">Професійний щоденник</p>
+        </div>
+        
+        <div class="space-y-4 w-full">
+            <input type="email" id="email" placeholder="Твій Email" class="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 outline-none focus:ring-1 ring-blue-500 transition-all text-white">
+            <input type="password" id="password" placeholder="Пароль" class="w-full p-4 rounded-2xl bg-slate-800 border border-slate-700 outline-none focus:ring-1 ring-blue-500 transition-all text-white">
+            <button onclick="handleLogin()" id="btn" class="w-full bg-blue-600 hover:bg-blue-500 p-4 rounded-2xl font-bold shadow-lg shadow-blue-900/10 active:scale-95 transition-all mt-4 text-white">Увійти в Human</button>
+            <p id="msg" class="text-center text-red-400 text-sm hidden font-medium"></p>
         </div>
     </div>
 
-    <div id="app-screen" class="hidden flex flex-col h-screen">
-        <header class="p-6 border-b border-slate-800 bg-[#0f172a] sticky top-0">
+    <div id="main-screen" class="hidden flex flex-col h-screen">
+        <header class="p-6 pt-8 bg-[#030712]/50 backdrop-blur-md sticky top-0 z-10">
             <div class="flex justify-between items-center mb-6">
-                <h2 id="user-name" class="text-xl font-bold text-blue-400 truncate pr-4">Вітаємо!</h2>
-                <button onclick="logout()" class="text-[10px] text-slate-400 uppercase tracking-widest border border-slate-700 px-3 py-1 rounded-lg">Вийти</button>
+                <div>
+                    <p class="text-slate-500 text-xs font-black uppercase tracking-widest">Вітаємо назад,</p>
+                    <h2 id="user-hi" class="text-2xl font-bold text-white">Учень</h2>
+                </div>
+                <button onclick="logout()" class="p-2 bg-slate-800 rounded-xl border border-slate-700">
+                    <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                </button>
             </div>
-            <div class="flex justify-around text-xs font-bold uppercase tracking-widest">
-                <button onclick="loadTab('grades')" id="tab-grades" class="pb-3 text-blue-500 border-b-2 border-blue-500 w-full transition-colors">Оцінки</button>
-                <button onclick="loadTab('schedule')" id="tab-schedule" class="pb-3 text-slate-500 border-b-2 border-transparent w-full transition-colors">Розклад</button>
-                <button onclick="loadTab('hw')" id="tab-hw" class="pb-3 text-slate-500 border-b-2 border-transparent w-full transition-colors">ДЗ</button>
+            
+            <div class="flex justify-around text-xs font-black uppercase tracking-widest border-b border-slate-800">
+                <button onclick="switchTab('grades')" id="t-grades" class="tab-active pb-3 text-sm transition-all">Оцінки</button>
+                <button onclick="switchTab('schedule')" id="t-schedule" class="text-slate-500 pb-3 text-sm transition-all">Розклад</button>
+                <button onclick="switchTab('hw')" id="t-hw" class="text-slate-500 pb-3 text-sm transition-all">ДЗ</button>
             </div>
         </header>
-        
-        <main id="content" class="flex-grow p-6 overflow-y-auto pb-24 space-y-3">
+
+        <main id="content" class="flex-grow p-6 overflow-y-auto space-y-4 pb-28">
             </main>
+
+        <nav class="fixed bottom-6 left-6 right-6 z-20">
+            <div class="glass backdrop-blur-md rounded-full px-6 py-4 flex justify-around items-center border border-slate-700">
+                <button onclick="switchTab('grades')" id="n-grades" class="text-slate-500 flex flex-col items-center gap-1 active:scale-90 transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                    <span class="text-[9px] font-black uppercase tracking-widest">Оцінки</span>
+                </button>
+                <button onclick="switchTab('schedule')" id="n-schedule" class="text-slate-500 flex flex-col items-center gap-1 active:scale-90 transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <span class="text-[9px] font-black uppercase tracking-widest">Розклад</span>
+                </button>
+                <button onclick="switchTab('hw')" id="n-hw" class="text-slate-500 flex flex-col items-center gap-1 active:scale-90 transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    <span class="text-[9px] font-black uppercase tracking-widest">ДЗ</span>
+                </button>
+            </div>
+        </nav>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
+        let authData = { token: '', uid: '' };
 
-        window.onload = () => {
-            const token = localStorage.getItem('h_token');
-            const name = localStorage.getItem('h_name');
-            if (token && name) {
-                showApp(name);
-            }
-        };
-
-        async function login() {
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value.trim();
-            const btn = document.getElementById('btn');
-            const msg = document.getElementById('msg');
-
-            if (!email || !password) return;
-            
-            btn.innerText = 'Вхід у систему...';
-            btn.disabled = true;
-            msg.classList.add('hidden');
-
-            try {
-                // ВИПРАВЛЕНО: Додано window.location.origin
-                const res = await fetch(window.location.origin + '/api/login', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ email, password })
-                });
-                
-                // Перевірка, чи сервер Render не "спить" (502/503 помилки)
-                if (!res.ok && (res.status === 502 || res.status === 503)) {
-                    throw new Error("Сервер прокидається. Зачекайте 15 секунд і натисніть ще раз.");
-                }
-
-                const data = await res.json();
-                
-                if (data.success) {
-                    localStorage.setItem('h_token', data.token);
-                    localStorage.setItem('h_uid', data.user.id);
-                    localStorage.setItem('h_name', data.user.first_name);
-                    showApp(data.user.first_name);
-                } else {
-                    msg.innerText = "Невірний логін або пароль";
-                    msg.classList.remove('hidden');
-                    btn.disabled = false;
-                    btn.innerText = 'Увійти';
-                }
-            } catch (err) {
-                // Тепер ми побачимо ТОЧНУ причину помилки на екрані
-                msg.innerText = err.message.includes('JSON') ? "Помилка сервера. Спробуйте ще раз." : err.message;
-                if(err.message === "Failed to fetch") msg.innerText = "Немає зв'язку. Спробуйте через 10 сек.";
-                msg.classList.remove('hidden');
-                btn.disabled = false;
-                btn.innerText = 'Увійти';
-            }
-        }
-
-        function showApp(name) {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('app-screen').classList.remove('hidden');
-            document.getElementById('user-name').innerText = "Привіт, " + name + "!";
-            loadTab('grades'); 
-        }
-
-        function logout() {
-            localStorage.clear();
-            location.reload();
-        }
-
-        async function loadTab(type) {
-            const content = document.getElementById('content');
-            
-            ['grades', 'schedule', 'hw'].forEach(t => {
-                const btn = document.getElementById('tab-' + t);
-                if(t === type) {
-                    btn.classList.replace('text-slate-500', 'text-blue-500');
-                    btn.classList.replace('border-transparent', 'border-blue-500');
-                } else {
-                    btn.classList.replace('text-blue-500', 'text-slate-500');
-                    btn.classList.replace('border-blue-500', 'border-transparent');
-                }
-            });
-
-            content.innerHTML = '<div class="text-center text-slate-500 py-10 animate-pulse">Отримання даних...</div>';
-
-            try {
-                // ВИПРАВЛЕНО: Відносний шлях з window.location.origin
-                const res = await fetch(window.location.origin + '/api/data?type=' + type, {
-                    headers: {
-                        'auth': localStorage.getItem('h_token'),
-                        'uid': localStorage.getItem('h_uid')
-                    }
-                });
-                
-                const data = await res.json();
-                
-                if (!data || data.length === 0) {
-                    content.innerHTML = '<div class="bg-slate-800/50 p-6 rounded-2xl text-center text-slate-500">Тут поки порожньо</div>';
-                    return;
-                }
-
-                content.innerHTML = data.map(item => {
-                    const title = item.subject || item.title || (item.level ? item.level + ' рівень' : 'Дані');
-                    const subtitle = item.time || item.deadline || '';
-                    const badge = item.count ? '<div class="text-xl font-black text-blue-500 bg-blue-500/10 px-3 py-1 rounded-lg">' + item.count + '</div>' : '';
-                    
-                    return '<div class="bg-slate-800 p-5 rounded-2xl flex justify-between items-center border border-slate-700/50 shadow-sm"><div class="pr-4"><div class="font-bold text-slate-200">' + title + '</div><div class="text-[11px] text-slate-500 mt-1 uppercase tracking-wider font-bold">' + subtitle + '</div></div>' + badge + '</div>';
-                }).join('');
-
-            } catch (e) {
-                content.innerHTML = '<div class="text-center text-red-400 py-10">Помилка завантаження даних</div>';
-            }
-        }
-    </script>
-</body>
-</html>
-    `);
-});
-
-// --- БЕКЕНД ---
-
-app.post('/api/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        const response = await axios.post('https://api.human.ua/v1/auth', { email, password }, {
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            timeout: 15000
-        });
-        res.json({ success: true, token: response.data.token, user: response.data.user });
-    } catch (e) {
-        res.status(401).json({ success: false, error: "Unauthorized" });
-    }
-});
-
-app.get('/api/data', async (req, res) => {
-    const { auth, uid } = req.headers;
-    const { type } = req.query;
-    const config = { headers: { 'Authorization': 'Bearer ' + auth } };
-    
-    // Отримуємо сьогоднішню дату для розкладу
-    const date = new Date().toISOString().split('T')[0];
-
-    try {
-        let url = '';
-        if (type === 'grades') url = 'https://api.human.ua/v1/student/' + uid + '/performance/average';
-        if (type === 'schedule') url = 'https://api.human.ua/v1/student/' + uid + '/lessons?date=' + date;
-        if (type === 'hw') url = 'https://api.human.ua/v1/student/' + uid + '/assignments?status=active';
-
-        const r = await axios.get(url, config);
-        let result = r.data;
-        
-        // Витягуємо масив уроків, якщо це розклад
-        if (type === 'schedule' && r.data.lessons) result = r.data.lessons;
-        
-        res.json(result);
-    } catch (e) {
-        res.json([]);
-    }
-});
-
-const PORT = process
 
